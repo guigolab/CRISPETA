@@ -1,4 +1,3 @@
-[TOC]
 #**About CRISPETA**
 		                            
 CRISPETA is a really flexible tool to obtain CRISPR paired sgRNAs on desired regions of a genome. Using as input a BED format file CRISPETA is able to find, analyze, and score all posible sgRNAs. As a result the program returns:
