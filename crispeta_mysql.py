@@ -61,4 +61,3 @@ print "Loading data to MySQL. This step can take several minutes"
 insert_into_table(conn, op.infile, op.table)                            #loads data into table
  
 sys.exit("Table '"+op.table+"' has been created succesfully on data base '"+op.db+"'.")   #exit
-
