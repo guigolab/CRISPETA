@@ -3,10 +3,10 @@ DEKO_tool
 """
 from func import *
 
-parser = argparse.ArgumentParser(description = "DECKOtool is a really flexible tool to obtain CRISPR paired gRNAs on desired regions of a genome.\
+parser = argparse.ArgumentParser(description = "DECKOtool is a really flexible tool to obtain CRISPR paired sgRNAs on desired regions of a genome.\
                                                 Using as input a BED format file DECKOtool is able to find, analyze, and score all posible pairs.\
-                                                As a result the program returns a file with {n} paired gRNAs/region,\
-                                                a BED file with genome coordinates of paired gRNAs ready to be uploaded to Genome Browser\
+                                                As a result the program returns a file with {n} paired sgRNAs/region,\
+                                                a BED file with genome coordinates of paired sgRNAs ready to be uploaded to Genome Browser\
                                                 and a summary of the execution.")
 
 parser.add_argument('-i', '--input',
@@ -31,50 +31,50 @@ parser.add_argument('-t', '--off-targets',
 parser.add_argument('-o', '--output',
                     dest = 'outfile',
                     action = 'store',
-                    default = 'gRNA_pairs.txt',
-                    help = 'Output file path (default="gRNA_pairs.txt")')
+                    default = 'sgRNA_pairs.txt',
+                    help = 'Output file path (default="sgRNA_pairs.txt")')
 
 parser.add_argument('-n', '--number',
                     dest = 'number_results',
                     action = 'store',
                     default = 10,
                     type= int,
-                    help = 'Number of paired gRNAs per feature retrieved by the program')
+                    help = 'Number of paired sgRNAs per feature retrieved by the program')
 
 parser.add_argument('-v', '--diversity',
                     dest = 'diversity_results',
                     action = 'store',
                     default = 0.5,
                     type = float,
-                    help = 'Percentage of max variety in gRNA pairs')
+                    help = 'Percentage of max variety in sgRNA pairs')
 
 parser.add_argument('-eu', '--exclude_up',
                     dest = 'exclude_up',
                     action = 'store',
                     default = 100,
                     type= int,
-                    help = 'Distance upstream from target region for the program to start to look for gRNAs')
+                    help = 'Distance upstream from target region for the program to start to look for sgRNAs')
 
 parser.add_argument('-ed', '--exclude_down',
                     dest = 'exclude_down',
                     action = 'store',
                     default = 100,
                     type= int,
-                    help = 'Distance downstream from target region for the program to start to look for gRNAs')
+                    help = 'Distance downstream from target region for the program to start to look for sgRNAs')
 
 parser.add_argument('-du', '--design_up',
                     dest = 'design_up',
                     action = 'store',
                     default = 500,
                     type= int,
-                    help = 'Range upstream from the excluded region to look for gRNAs (value must be positive)')
+                    help = 'Range upstream from the excluded region to look for sgRNAs (value must be positive)')
 
 parser.add_argument('-dd', '--design_down',
                     dest = 'design_down',
                     action = 'store',
                     default = 500,
                     type= int,
-                    help = 'Range downstream from the excluded region look for gRNAs (value must be positive)')
+                    help = 'Range downstream from the excluded region look for sgRNAs (value must be positive)')
 
 parser.add_argument('-mp', '--positive_mask',
                     dest = 'pmask',
@@ -93,14 +93,14 @@ parser.add_argument('-si', '--min_iscore',
                     action = 'store',
                     default = 0.2,
                     type= float,
-                    help = 'Minimum individual gRNA score allowed')
+                    help = 'Minimum individual sgRNA score allowed')
 
 parser.add_argument('-sp', '--min_pscore',
                     dest = 'paired_score',
                     action = 'store',
                     default = 0.4,
                     type= float,
-                    help = 'Minimum gRNA paired score allowed')
+                    help = 'Minimum sgRNA paired score allowed')
 
 parser.add_argument('-sc', '--score_combination',
                     dest = 'score_combination',
@@ -116,7 +116,7 @@ parser.add_argument('-c', '--construct_method',
                     default = None,
                     type = str,
                     choices=[None,'DECKO'],
-                    help = 'Method applied when making gRNA pairs and oligo construction')
+                    help = 'Method applied when making sgRNA pairs and oligo construction')
 
 parser.add_argument('-r', '--rank_method',
                     dest = 'rank',
@@ -124,12 +124,12 @@ parser.add_argument('-r', '--rank_method',
                     default = 'score',
                     type = str,
                     choices=['score','dist'],
-                    help = 'Method applied when ranking gRNA pairs [score/dist]')
+                    help = 'Method applied when ranking sgRNA pairs [score/dist]')
 
 parser.add_argument('-str', '--strict',
                     dest = 'strict',
                     default = False,
-                    help = 'Searching windows will not be increased if 0 gRNAs are found in a regions')
+                    help = 'Searching windows will not be increased if 0 sgRNAs are found in a regions')
 
 
 #Storing user options
@@ -145,7 +145,7 @@ p_grna_up, p_grna_dwn, polIII, n_in_seq, bad_position, bad_score, ot = [],[],[],
 starting_time=datetime.datetime.now()
 
 #Creating a temporary directory for temporary files and opening log file
-tmp_dir = tempfile.mkdtemp(prefix='gRNA')
+tmp_dir = tempfile.mkdtemp(prefix='sgRNA')
 log = open(options.outfile+'.log', 'a')
 log.write("CRISPETA started on: "+starting_time.strftime("%A, %d. %B %Y %I:%M%p\n")+'Options:\n')
 for k in vars(options).keys():
@@ -198,7 +198,7 @@ for line in sequences_file:
                design_up, design_down = options.design_up, options.design_down
                exclude_up, exclude_down = options.exclude_up, options.exclude_down
 
-          #Search for all posible gRNA patterns and creating a bed file with info for each match
+          #Search for all posible sgRNA patterns and creating a bed file with info for each match
           n = get_gRNAs(arguments, seq, reverse_seq,
                          design_up, design_down,
                          exclude_up, exclude_down,                         
@@ -206,11 +206,11 @@ for line in sequences_file:
                          tmp_dir, options.genome,
                          options.off_targets, conn)
 
-          #increase windows for gRNA search if [-strict] == True and pairs < n; max 3 times
+          #increase windows for sgRNA search if [-strict] == True and pairs < n; max 3 times
           counter=0
           new_design_up, new_design_down = design_up, design_down
 
-          if n[0]*n[1] < 1:                                      #No gRNAs to make pairs
+          if n[0]*n[1] < 1:                                      #No sgRNAs to make pairs
                start = str(int(arguments[2])-new_design_up)
                end = str(int(arguments[2])+new_design_down)
                regions_0 += 1
@@ -220,7 +220,7 @@ for line in sequences_file:
           write_browser_target_regions(tmp_dir, 'browser_target_regions', arguments, new_design_up, exclude_up, new_design_down, exclude_down)
 
 
-          #Analyze the gRNAs and compare their positions to masks positions
+          #Analyze the sgRNAs and compare their positions to masks positions
           for element_name in ['upstream_bed', 'downstream_bed']:
                get_masks(arguments, options.pmask, options.nmask, options.individual_score, tmp_dir, element_name)
 
