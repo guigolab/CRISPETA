@@ -642,7 +642,7 @@ def rank_pairs(tmp_dir, rank_method):
 	elif rank_method == 'dist':
 		with open(tmp_dir+'/gRNA_pairs') as fin:							#Create a list with the lines in the files
 			lines = [line.split() for line in fin]
-		lines.sort(key=itemgetter(13,11),reverse=True)									#Sort list by start position
+		lines.sort(key=itemgetter(13,11),reverse=False)									#Sort list by start position
 		with open(tmp_dir+'/'+'output.txt', 'w') as fout:
 			for el in lines:
 				fout.write('{0}\n'.format('\t'.join(el)))					#Write sorted list into new file
