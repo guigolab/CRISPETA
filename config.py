@@ -15,7 +15,7 @@ config = {
 
 			},
 
-			'table': 'hg19',				#crispeta
+			'table': 'crispeta',				#crispeta
 
 			'colnames': {
 						'col1' : 'grna',
