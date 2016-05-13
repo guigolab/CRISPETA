@@ -71,7 +71,7 @@ The comma separated file can be loaded directly to MySQL from the terminal using
 	mysql>	LOAD DATA LOCAL INFILE '<dir>/offtarget_analysis.txt' INTO TABLE  [genome_name]
 	-> FEILDS TERMINATED BY ',' LINES TERMINATED BY '\n';
 	
-##**CRISPETA **
+##**CRISPETA**
 **Running example**
 
 	$ python CRISPETA.py -i [file.bed] -g [genome.fasta] -o results.txt 
@@ -147,4 +147,4 @@ The fields in the file correspond to:
     crispeta_mysql.py -> module to load off-target information to MySQL in a easy way.
     config.py -> Options and values for MySQL configuration.
     func.py -> necessary functions for CRISPETA.py and crispeta_mysql.py to work.
-    README.md -> Marckdown file with information about CRISPETA.
+    README.md -> Markdown file with information about CRISPETA.
