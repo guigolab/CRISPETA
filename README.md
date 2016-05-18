@@ -1,4 +1,3 @@
-[TOC]
 #**About CRISPETa**
 		                            
 CRISPETa is a flexible tool to design optimal pairs of sgRNAs for deletion of desired genomic regions. Using as input a BED format file CRISPETa is able to find, analyze, and score all possible sgRNAs. As a result the program returns:
