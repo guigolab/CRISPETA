@@ -337,7 +337,7 @@ def check_grna_off_targets(gRNA, off_target_file, conn):
 	off = result.fetch_row()
 	if len(off) == 0:
 		return 0
-	if int(off[0][1]) <= t[0] and int(off[0][2]) <= t[1] and int(off[0][3]) <= t[2] and int(off[0][4]) <= t[3] and int(off[0][5]) <= t[4]:
+	if int(off[0][1]) <= t[0]+1 and int(off[0][2]) <= t[1] and int(off[0][3]) <= t[2] and int(off[0][4]) <= t[3] and int(off[0][5]) <= t[4]:
 		return 1
 	else:
 		return 0
@@ -521,10 +521,12 @@ def rank_mask(element, tmp_dir):
 		arg = line.strip().split('\t')
 		pmask = int(arg[-2])
 		nmask = 1 if arg[-1] == "0" else 0
-		if pmask == 1 and nmask == 1:
-			combined_mask = 2
-		elif pmask == 1 or nmask == 1:
+		if pmask == 23 and nmask == 1:
+			combined_mask = 7
+		elif pmask == 23 and nmask == 0:
 			combined_mask = 1
+		elif pmask == 0 and nmask == 1:
+			combined_mask = 3
 		else:
 			combined_mask = 0
 		for i in arg[:-3]+[str(combined_mask)]:
@@ -618,12 +620,41 @@ def write_pairs(combined_method, up, down, pscore, arg, of, method, seq_id):
 	else:
 		dist = str(int(up[1])-int(down[2]))
 
-	new_line = [seq_id]+up[:5]+down[:5]+[dist]+[str(score)]+[str(int(up[-1])+int(down[-1]))]
+	mscore = m_score(up[-1],down[-1])
+
+	new_line = [seq_id]+up[:5]+down[:5]+[dist]+[str(score)]+[str(mscore)]
 	for element in new_line:
 		of.write(element+'\t')
 	of.write('\n')
 	
 	return [1,0,0,1]
+
+
+def m_score(up,down):
+	up = int(up)
+	down = int(down)
+	s = up+down
+
+	if s==14:
+		return 10
+	elif s==10:
+		return 9
+	elif s==8:
+		return 8
+	elif s==7:
+		return 7
+	elif s==6:
+		return 6
+	elif s==4:
+		return 5
+	elif s==3:
+		return 4
+	elif s==2:
+		return 3
+	elif s==1:
+		return 2
+	else:
+		return 1
 
 
 def rank_pairs(tmp_dir, rank_method):
@@ -633,7 +664,16 @@ def rank_pairs(tmp_dir, rank_method):
 	if rank_method == 'score':
 		with open(tmp_dir+'/gRNA_pairs') as fin:							#Create a list with the lines in the files
 			lines = [line.split() for line in fin]
-		lines.sort(key=itemgetter(13,12),reverse=True)									#Sort list by start position
+
+		for el in lines:
+			el[-1] = int(el[-1])
+			el[-2] = float(format(float(el[-2]), '.3f'))
+
+		lines.sort(key=itemgetter(13,12),reverse=True)						#Sort list by start position
+		
+		for el in lines:
+			el[-1], el[-2] = str(el[-1]), str(el[-2])
+
 		with open(tmp_dir+'/'+'output.txt', 'w') as fout:
 			for el in lines:
 				fout.write('{0}\n'.format('\t'.join(el)))					#Write sorted list into new file
@@ -642,14 +682,22 @@ def rank_pairs(tmp_dir, rank_method):
 	elif rank_method == 'dist':
 		with open(tmp_dir+'/gRNA_pairs') as fin:							#Create a list with the lines in the files
 			lines = [line.split() for line in fin]
-		lines.sort(key=itemgetter(13,11),reverse=False)									#Sort list by start position
+		
+		for el in lines:
+			el[-1] = int(el[-1])
+			el[-3] = int(el[-3])
+		
+		lines.sort(key=lambda k: (k[13], -k[11]), reverse=True)				#key=itemgetter(13,11),reverse=False)	#Sort list by start position
+		
+		for el in lines:
+			el[-1], el[-3] = str(el[-1]), str(el[-3])
+		
 		with open(tmp_dir+'/'+'output.txt', 'w') as fout:
 			for el in lines:
 				fout.write('{0}\n'.format('\t'.join(el)))					#Write sorted list into new file
+		
 		os.rename(tmp_dir+'/output.txt', tmp_dir+'/gRNA_pairs')				#Overwrite the file with old name
 
-	#call('sort -k13,13 -k11,11n '+tmp_dir+'/gRNA_pairs -o '+tmp_dir+'/gRNA_pairs', shell=True)
-	#call('sort -k13,13 -k12,12nr '+tmp_dir+'/gRNA_pairs -o '+tmp_dir+'/gRNA_pairs', shell=True)
 
 
 def pairs_filter(arguments, input_file, output_file, number_results, variety, up_range, down_range, method, tmp_dir, strict):
@@ -880,7 +928,7 @@ def write_log_results(log, end_time, dt, pair_list, grna_list, outfile, n):
 				'\t#sgRNAs excluded by sgRNApol III stop signal (TTTTT):\tmin:{0} mean:{1} max:{2}\n'.format(t_min,t_mean,t_max)+
 				'\t#sgRNAs excluded by "N" nucleotide in sgRNA sequence:\tmin:{0} mean:{1} max:{2}\n'.format(n_min,n_mean,n_max)+
 				'\t#sgRNAs excluded by score:\t\t\t\tmin:{0} mean:{1} max:{2}\n'.format(s_min,s_mean,s_max)+
-				'\t#sgRNAs excluded by off-target analysis:\t\t\tmin:{0} mean:{1} max:{2}\n'.format(ot_min,ot_mean,ot_max)+
+				'\t#sgRNAs excluded by off-target analysis:\t\tmin:{0} mean:{1} max:{2}\n'.format(ot_min,ot_mean,ot_max)+
 				'\t#mean of individual sgRNAs scores:\t\t\t{0}\n\n'.format(str(means[1]))+
 
 				'Paired sgRNAs summary:\n'
