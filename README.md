@@ -74,7 +74,7 @@ The comma separated file can be loaded directly to MySQL from the terminal using
 ##**CRISPETA**
 **Running example**
 
-	$ python CRISPETA.py -i [file.bed] -g [genome.fasta] -o results.txt 
+	$ python CRISPETa.py -i [file.bed] -g [genome.fasta] -o results.txt 
 	
 **Parameters**
 
