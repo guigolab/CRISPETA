@@ -1,14 +1,14 @@
 #mysql
 config = {
 			'mysql': {
-						'user': 'crispeta',		#crispeta
-						'passwd': 'crispeta',	#crispeta
+						'user': 'root',		#crispeta
+						'passwd': '',	#crispeta
 						'host': 'localhost'
 			},
 
 			'mysql_db': {
-						'user': 'crispeta',		#crispeta
-						'passwd': 'crispeta',	#crispeta
+						'user': 'root',		#crispeta
+						'passwd': '',	#crispeta
 						'host': 'localhost',	
 						'db': 'crispeta',		#crispeta
 						'local_infile':1

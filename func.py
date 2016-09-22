@@ -4,6 +4,10 @@ from subprocess import call
 from os import listdir
 from config import *
 
+#Doench Score Rule_set2.0
+sys.path.insert(0,'analysis')
+from rs2_score_calculator import *
+
 #Biopithon
 from Bio.Seq import Seq
 from Bio.Alphabet import generic_dna
@@ -20,9 +24,6 @@ if _plotly==1:
 	import plotly.plotly as py
 	import plotly.graph_objs as go
 	from plotly.graph_objs import Scatter, Layout
-
-#import matplotlib.pyplot as plt
-#from matplotlib.backends.backend_pdf import PdfPages
 
 
 gibson_5 = 'atcttGTGGAAAGGACGAAACACCg'
@@ -49,10 +50,6 @@ def check_user_options(options):
 	if options.nmask != None and not os.path.isfile(options.nmask):
 		sys.exit('  Negative mask file (-m [Path/File]) does not exist... Exiting the program.')
 
-	#-off Off targets
-	#if not os.path.isfile(options.off_targets):
-	#	sys.exit('  Off-target file (-off [Path/File]) does not exist... Exiting the program.')
-
 
 def try_except(success_list,success_position, failure, *exceptions):
     try:
@@ -61,54 +58,18 @@ def try_except(success_list,success_position, failure, *exceptions):
         return failure if callable(failure) else failure
 
 
-def try_number(value):
-	try:
-		return int(value)
-	except ValueError:
-		return 0
-
-
-def check_input(input_file,tmp_dir):
-	infile = open(input_file, "r")
-	outfile = open(tmp_dir+'/checked_tmp_bed_file','w')
-	ucsc=re.compile("^[a-zA-Z0-9]+:[0-9,\.]+-[0-9,\.]+:.")
-	n = 1
-	ids = []
-
-	for line in infile:
-		line = line.strip()
-		n += 1
-		if ucsc.match(line):
-			strand = line[-1]
-			line = line.split(":")
-			line = [line[0]]+line[1].split("-")
-			chrom = line[0]
-			start = line[1].replace(",","").replace(".","")
-			end = line[2].replace(",","").replace(".","")
-			ID = 'unknown'+str(n)
-			strand = '+'
-
-		else:
-			line = line.split()
-			if len(line < 3): continue 
-			chrom = line[0]
-			start = line[1]
-			end = line[2]
-			ID = try_except(line,3,'unknown'+str(n),IndexError)
-			strand = try_except(line,5,'+',IndexError)
-
-
-
-
-
-def target_bed(input_file, design_up, exclude_up, exclude_down, design_down, tmp_dir):
+def target_bed(options, tmp_dir):
 	'''
 	Reads input BED file and creates a new bed file with regions
 	modified with input options (up and down ranges)
 	'''
-	infile = open(input_file, "r")
+	infile = open(options.infile, "r")
 	outfile = open(tmp_dir+'/tmp_bed_file','w')
-	
+	design_down = options.design_down
+	design_up = options.design_up
+	exclude_down = options.exclude_down
+	exclude_up = options.exclude_up
+
 	m=0 		#Total number of regions in input BED file
 	n=0 		#Number of modified regions
 	ids = {}	#Id's of each modified region
@@ -116,35 +77,27 @@ def target_bed(input_file, design_up, exclude_up, exclude_down, design_down, tmp
 	for line in infile:
 		m += 1
 		arguments = line.strip().split()
-				
-		#check distande and ranges
-		if len(arguments) < 3:
-			print('WARNING: arguments missing in region '+line)
-			continue
-		
+			
+		chrom = try_except(arguments,0,'chr?',IndexError)
+		start = try_except(arguments,1,'',IndexError)
+		end = try_except(arguments,2,'',IndexError)
+		ID = try_except(arguments,3,'unknown'+str(n+1),IndexError) 
+		if ID == ".":
+			ID = 'unknown'+str(n+1)
+		strand = try_except(arguments,5,'+',IndexError) 
+
+		if strand == '+':
+			n+=1
+			new_start = int(start)-design_up-exclude_up
+			new_end = int(end)+design_down+exclude_down
+			ids[ID] = [chrom, new_start, new_end, ID, strand]
+			outfile.write(chrom+'\t'+str(new_start)+'\t'+str(new_end)+'\t'+str(ID)+'\t'+'.'+'\t'+strand+'\n')
 		else:
 			n+=1
-			chrom = try_except(arguments,0,'chr?',IndexError)
-			start = try_except(arguments,1,'',IndexError)
-			end = try_except(arguments,2,'',IndexError)
-			ID = try_except(arguments,3,'',IndexError) if try_except(arguments,3,'',IndexError) != '.' else 'unknown'+str(n)
-			ID = 'unknown'+str(n) if ID == '' else ID
-			if try_except(arguments,5,'+',IndexError) == '.':
-				strand = '+'
-			else:
-				strand = try_except(arguments,5,'+',IndexError)
-			ids['>'+chrom+':'+str(int(start)-design_up-exclude_up)+'-'+str(int(end)+exclude_down+design_down)]=(ID)
-
-			if strand == '-':
-				design_up, design_down = design_down, design_up
-				exclude_up, exclude_down = exclude_down, exclude_up
-				ids['>'+chrom+':'+str(int(start)-design_up-exclude_up)+'-'+str(int(end)+exclude_down+design_down)]=(ID)
-
-			outfile.write(chrom+'\t'+
-				str(int(start)-design_up-exclude_up)+'\t'+
-				str(int(end)+design_down+exclude_down)+'\t'+
-				str(ID)+'\t'+'.'+'\t'+
-				strand+'\n')
+			new_start = int(start)-design_down-exclude_down
+			new_end = int(end)+design_up+exclude_up
+			ids[ID] = [chrom, new_start, new_end, ID, strand]
+			outfile.write(chrom+'\t'+str(new_start)+'\t'+str(new_end)+'\t'+str(ID)+'\t'+'.'+'\t'+strand+'\n')
 
 	infile.close()
 	outfile.close()
@@ -158,43 +111,47 @@ def get_sequences(genome_file_name, input_file, output_file, tmp_dir):
 	'''
 	Create a new fasta file by obtaining the sequences from the specified genome fasta file using bedtools
 	'''
-
 	genome = genome_file_name
 	input_bed_file = tmp_dir+'/'+input_file
 	output_fasta_file = tmp_dir+'/'+output_file
-	command_line='bedtools getfasta -fi '+genome+' -bed '+input_bed_file+' -s -fo '+output_fasta_file
+	command_line='bedtools getfasta -name -fi '+genome+' -bed '+input_bed_file+' -fo '+output_fasta_file 
 	os.system(command_line)
 	with open(output_fasta_file) as f:
 	    for i, l in enumerate(f):
 	        pass
-	os.remove(tmp_dir+'/'+input_file)
+#	os.remove(tmp_dir+'/'+input_file)
 	if os.path.getsize(output_fasta_file) == 0:
 		sys.exit('No regions to analyze... Exiting the program.')	#If 0 sequences are obtained
 	else:
 		return i + 1
 
 
-def get_gRNAs(arguments, seq, reverse_seq, design_up, design_down, exclude_up, exclude_down, strand, iscore, tmp_dir, genome, off_target_file, conn):
+def use_database(host='localhost', dbuser='crispeta', database='crispeta', dbpass='pwd'):
+	from config import config
+	dic = config['mysql_db']
+	conn = _mysql.connect(user=dic['user'],passwd=dic['passwd'],host=dic['host'],db=dic['db'])
+	return conn
+
+
+def get_gRNAs(arguments, seq, design_left, design_right, exclude_left, exclude_right, iscore, tmp_dir, genome, off_targets, conn, score_method):
 	'''
 	Analyze sequence to find all posibles sgRNAs and filter the undesired ones
 	'''
 	gRNAs_upstream_downstream_filtered = [0,0,[0,0,0,0,0]]		#sgRNAs upstream and downstream in forward chain and sgRNAs filtered
-	direction = "forward" if strand == '+' else "reverse"		#Direction of the positive chain
-	reverse_strand = '-' if strand == '+' else '+'				#Sign of reverse strand of the region in the input BED file
 
 	new_files=open(tmp_dir+'/upstream_bed','w')
 	new_files=open(tmp_dir+'/downstream_bed','w')
 	new_files.close()
 
-	for l in [seq,strand],[reverse_seq,reverse_strand]:
-		n = search_gRNA_in_sequence(l[0], arguments, design_up, design_down, exclude_up, exclude_down, direction, iscore, off_target_file, l[1], tmp_dir, conn)
-		gRNAs_upstream_downstream_filtered[0] += n[0]			#Add number of positive sgRNAs upstream  in chain 
-		gRNAs_upstream_downstream_filtered[1] += n[1]			#Add number of positive sgRNAs downstream in chain
-		gRNAs_upstream_downstream_filtered[2][0] += n[2][0]		#Add number of 
-		gRNAs_upstream_downstream_filtered[2][1] += n[2][1]		#Add number of 
-		gRNAs_upstream_downstream_filtered[2][2] += n[2][2]		#Add number of 
-		gRNAs_upstream_downstream_filtered[2][3] += n[2][3]		#Add number of 
-		gRNAs_upstream_downstream_filtered[2][4] += n[2][4]		#Add number of 
+	design_regions_seq = [seq[:design_left+17]+"N"*100+seq[-design_right-17:], len(seq)]
+	n = search_gRNA_in_sequence(design_regions_seq, arguments, design_left, design_right, exclude_left, exclude_right, iscore, off_targets, tmp_dir, conn, score_method)
+	gRNAs_upstream_downstream_filtered[0] += n[0]			#Add number of positive sgRNAs upstream  in chain 
+	gRNAs_upstream_downstream_filtered[1] += n[1]			#Add number of positive sgRNAs downstream in chain
+	gRNAs_upstream_downstream_filtered[2][0] += n[2][0]		#Add number of 
+	gRNAs_upstream_downstream_filtered[2][1] += n[2][1]		#Add number of 
+	gRNAs_upstream_downstream_filtered[2][2] += n[2][2]		#Add number of 
+	gRNAs_upstream_downstream_filtered[2][3] += n[2][3]		#Add number of 
+	gRNAs_upstream_downstream_filtered[2][4] += n[2][4]		#Add number of 
 
 	file_list = ['upstream_bed', 'downstream_bed']				#Sorting BED files with sgRNAs info
 	sort_bed_files(tmp_dir, file_list,1)						#Sorting BED files with sgRNAs info
@@ -202,26 +159,40 @@ def get_gRNAs(arguments, seq, reverse_seq, design_up, design_down, exclude_up, e
 	return(gRNAs_upstream_downstream_filtered)
 
 
-def search_gRNA_in_sequence(sequence, arguments, design_up, design_down, exclude_up, exclude_down, direction, iscore, off_target_file, strand_sign, tmp_dir, conn):
+def search_gRNA_in_sequence(sequence, arguments, design_left, design_right, exclude_left, exclude_right, iscore, off_targets, tmp_dir, conn, score_method):
 
 	grnas = [0,0,[0,0,0,0,0]]
-	for m in re.finditer(r'(?=(.{24}.GG...))',str(sequence)):															#All sgRNAs that fits the pattern
+
+	for m in re.finditer(r'(?=(.{24}.GG...))',str(sequence[0])): 							#All sgRNAs that fits the pattern
 		
-		filters = gRNA_filter(arguments, m.start(), design_up, design_down, direction, iscore, off_target_file, m.group(1), conn)	#Filter out sgRNAs
-		grnas[2][0] += filters[1][0]
-		grnas[2][1] += filters[1][1]
-		grnas[2][2]	+= filters[1][2]
-		grnas[2][3] *= filters[1][3]
-		grnas[2][4] += filters[1][4]
+		if chek_cut_position(m, '+', design_left):											#remove sgRNA if cutting position in exclude regions
+			continue
+		filters = gRNA_filter(arguments, m, iscore, off_targets, conn, '+', score_method)	#Filter out sgRNAs
+		grnas = complete_sgrna_info(grnas, filters)
 		if filters[0]:
 			continue
 
-		n = match_to_bed(arguments,							#arguments = [chr,start,end]
-			m.start(),										#m_start
-			design_up, design_down,							#ranges
-			exclude_up, exclude_down,						#distance from TSS
-	 		m.group(1),										#sgRNA
-			strand_sign, tmp_dir)							#sgRNA strand, tmp_dir
+		n = match_to_bed(arguments, m, sequence[1],	#arguments = [chr,start,end], match_info, sequence_length
+			design_left, design_right,				#ranges
+			exclude_left, exclude_right,			#distance from TSS
+			'+', tmp_dir, score_method)				#sgRNA strand, tmp_dir
+	
+		grnas[0] += n[0]
+		grnas[1] += n[1]
+
+	for m in re.finditer(r'(?=(...CC.{25}))',str(sequence[0])): 							#All sgRNAs that fits the pattern
+		
+		if chek_cut_position(m, '-', design_left):											#remove sgRNA if cutting position in exclude regions
+			continue
+		filters = gRNA_filter(arguments, m, iscore, off_targets, conn, '-', score_method)	#Filter out sgRNAs
+		grnas = complete_sgrna_info(grnas, filters)
+		if filters[0]:
+			continue
+
+		n = match_to_bed(arguments, m, sequence[1],	#arguments = [chr,start,end], match_info, sequence_length
+			design_left, design_right,				#ranges
+			exclude_left, exclude_right,			#distance from TSS
+			'-', tmp_dir, score_method)				#sgRNA strand, tmp_dir
 	
 		grnas[0] += n[0]
 		grnas[1] += n[1]
@@ -229,37 +200,55 @@ def search_gRNA_in_sequence(sequence, arguments, design_up, design_down, exclude
 	return grnas
 
 
-def gRNA_filter(arguments, start, design_up, design_down, direction, iscore, off_target_file, group, conn):
+def complete_sgrna_info(grnas, filters):
+		grnas[2][0] += filters[1][0]
+		grnas[2][1] += filters[1][1]
+		grnas[2][2]	+= filters[1][2]
+		grnas[2][3] *= filters[1][3]
+		grnas[2][4] += filters[1][4]
+		return grnas
+
+def gRNA_filter(arguments, m, iscore, off_targets, conn, sgRNA_strand, score_method):
 	'''
 	Filter out sgRNAs
 	'''
-	if 'TTTTT' in group[4:-3]:															#remove sgRNAs with TTTTT stop signal for polimerase III
-		return [1,[1,0,0,0,0]]
-	if 'N' in group[4:-3]:
+	if sgRNA_strand == '-':
+		sgrna = reverse_complement(m.group(1))
+	else:
+		sgrna = m.group(1)
+
+	if 'N' in sgrna[4:-3]:													#remove sgRNAs with N
 		return [1,[0,1,0,0,0]]
-	if check_grna_position(arguments, start, design_up, design_down, direction):		#Avoid sgRNAs in targeting region
-		return [1,[0,0,1,0,0]]
-	if calc_score(group) < iscore:														#remove sgRNAs with score < min individual score
+	if 'TTTTT' in sgrna[4:-3]:												#remove sgRNAs with TTTTT stop signal for polimerase III
+		return [1,[1,0,0,0,0]]
+	if calc_score(sgrna, score_method) < float(iscore):							#remove sgRNAs with score < min individual score
 		return [1,[0,0,0,1,0]]
-	if check_grna_off_targets(group[4:-6], off_target_file, conn) == 0:					#Filter sgRNAs by off-targets
+	if check_grna_off_targets(sgrna[4:-6], off_targets, conn) == 0:			#Filter sgRNAs by off-targets
 		return [1,[0,0,0,0,1]]
 	return [0,[0,0,0,0,0]]
 
-def check_grna_position(arguments, match_position, design_up, design_down, direction):
-	'''
-	Checks if the sgRNA falls into a non interesting region
-	'''
-	if direction == "forward":
-		cut_position = int(arguments[1])+match_position+21
-	else:
-		cut_position = int(arguments[2])-match_position-21
 
-	undesired_region = range(int(arguments[1])+1+design_up,int(arguments[2])-design_down)
-	if cut_position in undesired_region:
+def chek_cut_position(m, strand, design_left):
+	excluded_range = range(design_left, design_left + 134)
+	if strand == '+':
+		cut_position = m.start() + 21
+	else:
+		cut_position = m.start() + 9
+	if cut_position in excluded_range:
 		return 1
 
 
-def calc_score(s):
+def calc_score(sgrna, method):
+	if method.upper() == "DOENCH1":
+		score = doench_score_1(sgrna)
+	elif method.upper() == "DOENCH2":
+		score = doench_score_2(sgrna)
+	elif method.upper() == "HAN":
+		score = han_score(sgrna[4:24])
+	return score 
+
+
+def doench_score_1(s):
     '''
     Doench score
     '''
@@ -308,30 +297,54 @@ def calc_score(s):
     return final_score
 
 
-def use_database(host='localhost', dbuser='crispeta', database='crispeta', dbpass='pwd'):
-	#DB_HOST = host
-	#DB_USER = dbuser
-	#DB_NAME = database 
-	#DB_PASS = dbpass
-	from config import config
-	dic = config['mysql_db']
-	#conn = _mysql.connect(user=DB_USER,passwd=DB_PASS,host=DB_HOST,db=DB_NAME)
-	conn = _mysql.connect(user=dic['user'],passwd=dic['passwd'],host=dic['host'],db=dic['db'])
-	return conn
+def doench_score_2(seq):
 
-def check_grna_off_targets(gRNA, off_target_file, conn):
+	if 'N' in seq:
+		return 0
+
+	if sklearn.__version__ != '0.16.1':
+		print 'Incorrect scikit-learn version. Use 0.16.1'
+		sys.exit(1)
+	seq = seq
+	if len(seq)!=30: 
+		print "Please enter a 30mer sequence."
+		sys.exit(1)
+	aa_cut = -1
+	per_peptide = -1
+
+	model = create_model()
+	if seq[25:27] == 'GG':
+		score = model_comparison.predict(seq, aa_cut, per_peptide, model=model)
+	else:
+		score = 0
+
+	return score
+
+
+def create_model():
+	model_file_1 = 'saved_models/V3_model_nopos.pickle'
+	model_file = model_file_1
+	try:
+		with open(model_file, 'rb') as f:
+			model= pickle.load(f)    
+	except:
+		raise Exception("could not find model stored to file %s" % model_file)
+
+	return model
+
+
+def check_grna_off_targets(grna, off_targets, conn):
 	'''
 	Checks the number of offtargets for a sgRNA
 	'''
 	from config import config
-	t=off_target_file.split(',')
+	t=off_targets.split(',')
 	for i,j in enumerate(t):
 		if j=='x':
 			t[i]=float("inf")
 		else:
 			t[i]=int(j)
 	table = config['table']
-	grna = gRNA
 	conn.query("SELECT * FROM "+table+" where grna = '"+grna+"';")
 	result = conn.store_result()
 	off = result.fetch_row()
@@ -343,68 +356,67 @@ def check_grna_off_targets(gRNA, off_target_file, conn):
 		return 0
 
 
-def match_to_bed(arguments, m_start, design_up, design_down, exclude_up, exclude_down, gRNA, strand, tmp_dir):
+def match_to_bed(arguments, m, leng, design_left, design_right, exclude_left, exclude_right, strand, tmp_dir, score_method):
 	'''
 	Add sgRNAs to a BED file
 	'''	
-	gRNAs_upstream = 0
-	gRNAs_downstream = 0
+	sgRNAs_upstream = 0
+	sgRNAs_downstream = 0
 
-	if arguments[3] == '+':
-		cut_position_up =  int(arguments[1]) + design_up - 21
-		cut_position_down =  int(arguments[2]) - design_down - 21
+	if strand == '-':
+		sgrna = reverse_complement(m.group(1))
 	else:
-		cut_position_up = int(arguments[2]) - design_up - 9
-		cut_position_down = int(arguments[1]) + design_down - 9
-	
-	if strand == '+':
-		position = int(arguments[1]) + m_start
-	else:
-		position = int(arguments[2]) - m_start - 31
-		
-	if position < cut_position_up and arguments[3] == '+':
-		gRNAs_upstream+=1
-		name = 'upstream_bed'
-	elif position > cut_position_down and arguments[3] == '+':
-		gRNAs_downstream+=1		
+		sgrna = m.group(1)
+
+	if m.start() > design_left:
+		remove_len = leng - design_left - design_right
+		sgrna_position = int(arguments[1]) + remove_len - 134 + m.start()
+		sgRNAs_downstream+=1
 		name = 'downstream_bed'
-	elif position < cut_position_down and arguments[3] == '-':
-		gRNAs_downstream+=1	
-		name = 'downstream_bed'
-	elif position > cut_position_up and arguments[3] == '-':
-		gRNAs_upstream+=1
-		name = 'upstream_bed'
 	else:
-		return([0,0])
+		sgrna_position = int(arguments[1]) + m.start()
+	 	sgRNAs_upstream+=1
+	 	name = 'upstream_bed'
 
-	write_in_bed(arguments, name, position, gRNA, strand, tmp_dir)
-	return([gRNAs_upstream,gRNAs_downstream])
+	write_in_bed(arguments, name, sgrna_position, sgrna, strand, tmp_dir, score_method)
+	return([sgRNAs_upstream,sgRNAs_downstream])
 
 
-def write_in_bed(arguments, file_name, position, gRNA, strand, tmp_dir,):
+def write_in_bed(arguments, file_name, sgrna_position, sgrna, strand, tmp_dir, score_method):
 	'''
 	Writes the positions of sgRNA in BED format
 	'''
-	score=round(calc_score(gRNA),3)
+	score=round(calc_score(sgrna, score_method),3)
+	if strand == '-':
+		position = sgrna_position + 3
+	else:
+		position = sgrna_position + 4
+
 	with open(tmp_dir+'/'+file_name, 'a') as file_bed:
 		file_bed.write(arguments[0]+'\t'+
-			str(position+4)+'\t'+
-			str(position+27)+'\t'+
-			gRNA[4:27]+'\t'+
+			str(position)+'\t'+
+			str(position+23)+'\t'+
+			sgrna[4:27]+'\t'+
 			str(score)+'\t'+
 			strand+'\t'+'0'+'\t'+'0'+'\n')
 	file_bed.close()
+
+
+def complement(seq):
+    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N'} 
+    bases = list(seq) 
+    letters = [complement[base] for base in bases] 
+    return ''.join(letters)
+
+
+def reverse_complement(seq):
+    return complement(seq[::-1])
 
 
 def sort_bed_files(tmp_dir, file_list,key_item):
 	'''
 	sort all bed files in the file_list
 	'''
-	# for element in file_list:
-	# 	if os.path.exists(element):
-	# 		call('sort -k1,1 -k2,2n '+element+' -o '+element, shell=True)
-	# 	else:
-	# 		pass
 	for element in file_list:
 		if os.path.exists(tmp_dir+'/'+element):								#If file exist
 			with open(tmp_dir+'/'+element) as fin:							#Create a list with the lines in the file
@@ -416,63 +428,7 @@ def sort_bed_files(tmp_dir, file_list,key_item):
         	os.rename(tmp_dir+'/'+'output.txt', tmp_dir+'/'+element)		#Overwrite the file with old name
 
 
-def new_design_regions(n, design_up, design_down):
-	if n[0] == 0 and n[1] == 0:
-		return [design_up*2, design_down*2]
-	elif n[0] == 0 and n[1] != 0:
-		return [design_up*2, 0]
-	elif n[0] != 0 and n[1] == 0:
-		return [0, design_down*2]
-	else:
-		return [0,0]
-
-
-def strict_bed_file(arguments, up_range, new_up_range, down_range, new_down_range, tmp_dir):
-	
-	of = open(tmp_dir+'/strict_bed', 'w')
-	
-	start = int(arguments[1])+up_range-new_up_range
-	end = int(arguments[2])-down_range+new_down_range
-	of.write(arguments[0]+'\t'+str(start)+'\t'+str(end)+'\t'+'.'+'\t'+'.'+'\t'+arguments[3]+'\n')
-
-	of.close()
-
-
-def strict_sequence(input_file, tmp_dir):
-	'''
-	Returns first sequence in a fasta file
-	'''
-	fi = open(tmp_dir+'/'+input_file, 'r')
-	for line in fi:
-		if line.startswith('>'):
-			strand = line[-3]
-			args = line[1:-4].replace(":",",").replace("-",",",1).strip().split(",") + [strand]
-		else:
-			seq = line.strip()
-	fi.close()
-	os.remove(tmp_dir+'/'+input_file)
-	return([seq]+args)
-
-
-def write_browser_target_regions(tmp_dir, output_name, arguments, new_design_up, exclude_up, new_design_down, exclude_down):
-
-	fb = open(tmp_dir+'/'+output_name, 'a')
-	chrom = arguments[0]
-	start1 = str(int(arguments[1])+new_design_up+exclude_up)
-	start2 = str(int(arguments[1])+new_design_up)
-	start3 = str(int(arguments[1]))
-	end1 = str(int(arguments[2])-new_design_down-exclude_down)
-	end2 = str(int(arguments[2])-new_design_down)
-	end3 = str(int(arguments[2]))
-	ID = arguments[4]
-	tab = '\t'
-	fb.write(chrom+tab+start1+tab+end1+tab+ID+tab+'0	+	0	0	0,0,0'+'\n')
-	fb.write(chrom+tab+start2+tab+end2+tab+ID+tab+'0	+	0	0	180,180,130'+'\n')
-	fb.write(chrom+tab+start3+tab+end3+tab+ID+tab+'0	+	0	0	40,175,40'+'\n')
-	fb.close()
-
-
-def get_masks(arguments, pmask, nmask, iscore, tmp_dir, element_name):
+def get_masks(pmask, nmask, tmp_dir, element_name):
 	'''
 	Compare sgRNA location with DNAse hypersensitivity regions
 	and re-sctructure the files in order to clean all unnecesary data
@@ -526,7 +482,7 @@ def rank_mask(element, tmp_dir):
 		elif pmask == 23 and nmask == 0:
 			combined_mask = 1
 		elif pmask == 0 and nmask == 1:
-			combined_mask = 3
+			combined_mask = 5
 		else:
 			combined_mask = 0
 		for i in arg[:-3]+[str(combined_mask)]:
@@ -535,10 +491,20 @@ def rank_mask(element, tmp_dir):
 	os.rename(tmp_dir+'/'+element+'_x', tmp_dir+'/'+element)
 
 
-def make_pairs(arguments, file_list, number_results, tmp_dir, outfile, variety_results, pscore, design_up, design_down, combined_method, construct_method, rank_method, seq_id, strict):
+def make_pairs(arguments, file_list, options, tmp_dir, design_left, design_right, seq_id):
    	'''
 	Reads files with sgRNAs up/down stream and make sgRNA pairs
 	'''
+	number_results = options.number_results
+	outfile = options.outfile
+	variety_results = options.diversity_results
+	pscore = float(options.paired_score)
+	design_up = design_left
+	design_down = design_right
+	combined_method = options.score_combination
+	construct_method = options.construct_method
+	rank_method = options.rank
+
 	n_pairs = 0
 	n_score = 0
 	n_no_G = 0
@@ -580,14 +546,11 @@ def make_pairs(arguments, file_list, number_results, tmp_dir, outfile, variety_r
 	f_up.close()
 	of.close()
 	
-	#with open(outfile,'a') as output:
-	#	output.write(arg[0]+':\t'+arg[1]+'-'+arg[2]+'\t'+'('+arg[3]+') '+arg[4]+'\n')
-	#output.close()
-	#call('echo ">'+arg[0]+':\t'+arg[1]+'-'+arg[2]+'\t'+'('+arg[3]+') '+arg[4]+'" >> '+outfile, shell=True)
 	rank_pairs(tmp_dir, rank_method)
 
-	returned_pairs = pairs_filter(arguments, tmp_dir+'/gRNA_pairs', outfile, number_results, variety_results, design_up, design_down, construct_method, tmp_dir, strict)
-	#call('cat '+tmp_dir+'/gRNA_pairs >> check.txt', shell=True)
+	returned_pairs = pairs_filter(arguments, tmp_dir+'/gRNA_pairs', outfile, number_results, variety_results,
+								  design_up, design_down, construct_method, tmp_dir)
+
 	if os.path.isfile(tmp_dir+'/gRNA_pairs'): os.remove(tmp_dir+'/gRNA_pairs')
 	if os.path.isfile(tmp_dir+'/'+file_list[0]): os.remove(tmp_dir+'/'+file_list[0])	
 	if os.path.isfile(tmp_dir+'/'+file_list[1]): os.remove(tmp_dir+'/'+file_list[1])
@@ -599,11 +562,6 @@ def write_pairs(combined_method, up, down, pscore, arg, of, method, seq_id):
 	'''
 	Analyze 2 gRNAs and write them into a file
 	'''
-	#Filter by DECKO construction U6 promotor
-	if method == "DECKO":
-		if up[3][0]!='G' and down[3][0]!='G':
-			return[1,0,1,0]
-
 	#Paired score method
 	if combined_method == "+":
 		score = round(float(up[4])+float(down[4]),3)
@@ -615,46 +573,25 @@ def write_pairs(combined_method, up, down, pscore, arg, of, method, seq_id):
 		return [1,1,0,0]
 
 	#Distance between gRNAs
-	if arg[3] == '+':
-		dist = str(int(down[1])-int(up[2]))
-	else:
-		dist = str(int(up[1])-int(down[2]))
+	dist = max(int(down[1]), int(up[1])) - min(int(down[2]), int(up[2]))
 
 	mscore = m_score(up[-1],down[-1])
 
-	new_line = [seq_id]+up[:5]+down[:5]+[dist]+[str(score)]+[str(mscore)]
+	if method == "DECKO":
+		if up[3][0]!='G' and down[3][0]!='G':
+			up[3] = "G"+up[3]
+
+	new_line = [seq_id]+up[:5]+down[:5]+[str(dist)]+[str(score)]+[str(mscore)]
 	for element in new_line:
 		of.write(element+'\t')
 	of.write('\n')
 	
+	#Check DECKO construction (U6 promotor)
+	if method == "DECKO":
+		if up[3][0]!='G' and down[3][0]!='G':
+			return[1,0,1,0]
+			
 	return [1,0,0,1]
-
-
-def m_score(up,down):
-	up = int(up)
-	down = int(down)
-	s = up+down
-
-	if s==14:
-		return 10
-	elif s==10:
-		return 9
-	elif s==8:
-		return 8
-	elif s==7:
-		return 7
-	elif s==6:
-		return 6
-	elif s==4:
-		return 5
-	elif s==3:
-		return 4
-	elif s==2:
-		return 3
-	elif s==1:
-		return 2
-	else:
-		return 1
 
 
 def rank_pairs(tmp_dir, rank_method):
@@ -700,7 +637,7 @@ def rank_pairs(tmp_dir, rank_method):
 
 
 
-def pairs_filter(arguments, input_file, output_file, number_results, variety, up_range, down_range, method, tmp_dir, strict):
+def pairs_filter(arguments, input_file, output_file, number_results, variety, up_range, down_range, method, tmp_dir):
 	'''
 	Remove those gRNA pairs that appears more times than minimum variety
 	'''
@@ -755,33 +692,26 @@ def pairs_filter(arguments, input_file, output_file, number_results, variety, up
 					oligo = '.'
 
 				#Distance till excluded region
-				if arguments[3] == '+':
-					dist_up_TSS = int(arg[2]) - (int(arguments[1]) + up_range)
-					dist_down_TSS = int(arg[6]) - (int(arguments[2]) - down_range)
-				else:
-					dist_down_TSS = int(arg[7]) - (int(arguments[1]) + down_range)
-					dist_up_TSS = int(arg[1]) - (int(arguments[2]) - up_range)
+				# if arguments[3] == '+':
+				# 	dist_up_TSS = int(arg[2]) - (int(arguments[1]) + up_range)
+				# 	dist_down_TSS = int(arg[6]) - (int(arguments[2]) - down_range)
+				# else:
+				# 	dist_down_TSS = int(arg[7]) - (int(arguments[1]) + down_range)
+				# 	dist_up_TSS = int(arg[1]) - (int(arguments[2]) - up_range)
+				dist_up_TSS = min(int(arg[2]), int(arg[7])) - (int(arguments[1]) + up_range)
+				dist_down_TSS = max(int(arg[1]), int(arg[6])) - (int(arguments[2]) - down_range)  
 
-				if arguments[3] == '+':
-					result_lines.append(seq_id+'('+str(i)+')'+'\t'+arg[0]+'\t'+arg[1]+'\t'+arg[2]+'\t'+arg[3]+'\t'+arg[4]+'\t'
+				result_lines.append(seq_id+'('+str(i)+')'+'\t'+arg[0]+'\t'+arg[1]+'\t'+arg[2]+'\t'+arg[3]+'\t'+arg[4]+'\t'
 								+arg[5]+'\t'+arg[6]+'\t'+arg[7]+'\t'+arg[8]+'\t'+arg[9]+'\t'
 				 				+str(dist_up_TSS)+'\t'+str(dist_down_TSS)+'\t'
 				 				+arg[10]+'\t'+arg[11]+'\t'+arg[12]+'\t'+oligo+'\n')
-				else:
-					result_lines.append(seq_id+'('+str(i)+')'+'\t'+arg[5]+'\t'+arg[6]+'\t'+arg[7]+'\t'+arg[8]+'\t'+arg[9]+'\t'
-								+arg[0]+'\t'+arg[1]+'\t'+arg[2]+'\t'+arg[3]+'\t'+arg[4]+'\t'
-								+str(dist_down_TSS)+'\t'+str(dist_up_TSS)+'\t'
-								+arg[10]+'\t'+arg[11]+'\t'+arg[12]+'\t'+oligo+'\n')
 
 				positions = [arg[1],arg[7]] if int(arg[1]) < int(arg[7]) else [arg[6],arg[2]]
 				start = str(positions[0])
 				end = str(positions[1])
-				browser_lines.append(arg[0]+'\t'+start+'\t'+end+'\t'+arguments[4]+'('+str(i)+')'+'\t'+arg[11]+'\t'+'.'+
+				browser_lines.append(arg[0]+'\t'+start+'\t'+end+'\t'+arguments[3]+'('+str(i)+')'+'\t'+arg[11]+'\t'+'.'+
 						'\t'+start+'\t'+end+'\t'+str(round((float(arg[11])*255.0)/2.0,0))+',0,0'+'\t'+'2'+'\t'+
 						'23,23'+'\t'+'0,'+str(int(end)-int(start)-23)+'\n')				
-
-	if strict and len(result_lines) < number_results:
-		return([i,v])
 
 	for result in result_lines:
 		fo = open(output_file, 'a')
@@ -799,6 +729,33 @@ def pairs_filter(arguments, input_file, output_file, number_results, variety, up
 	fo.close()
 	fbpairs.close()
 	return([i,v])
+
+
+def m_score(up,down):
+	up = int(up)
+	down = int(down)
+	s = up+down
+
+	if s==14:
+		return 10
+	elif s==12:
+		return 9
+	elif s==10:
+		return 8
+	elif s==8:
+		return 7
+	elif s==7:
+		return 6
+	elif s==6:
+		return 5
+	elif s==5:
+		return 4
+	elif s==2:
+		return 3
+	elif s==1:
+		return 2
+	else:
+		return 1
 
 
 def write_browser_file(tmp_dir, of):
@@ -825,61 +782,22 @@ def write_browser_file(tmp_dir, of):
 	browser_file.close()
 
 
-def comput_means(outfile):
+def write_browser_target_regions(tmp_dir, output_name, arguments, design_left, exclude_left, design_right, exclude_right):
 
-	fi = open(outfile, 'r')
-	oldID = ''
-
-	pairs, pairmeans = 0, []
-	distances, dmeans = [], []
-	iscores, imeans = [], []
-	pscores, pmeans = [], []
-
-	for line in fi:
-		if line.startswith('Sequence_ID(#pair)'):
-			continue
-		arg  = line.strip().split('\t')
-		newID = arg[0].split('(')[0]
-
-		if  newID != oldID:
-			if oldID == '':
-				pairs += 1
-				distances.append(int(arg[13]))
-				iscores.append(float(arg[5]))
-				iscores.append(float(arg[10]))
-				pscores.append(float(arg[14]))
-				oldID = newID	
-				continue	
-
-			pairmeans.append(pairs)
-			dmeans.append(np.mean(distances))
-			imeans.append(np.mean(iscores, dtype=np.float32))
-			pmeans.append(np.mean(pscores, dtype=np.float32))	
-
-			distances, iscores, pscores, pairs = [], [], [], 0
-			pairs += 1
-			distances.append(int(arg[13]))
-			iscores.append(float(arg[5]))
-			iscores.append(float(arg[10]))
-			pscores.append(float(arg[14]))
-		
-		else:
-			pairs += 1
-			distances.append(int(arg[13]))
-			iscores.append(float(arg[5]))
-			iscores.append(float(arg[10]))
-			pscores.append(float(arg[14]))		
-
-		oldID = newID
-
-	pairmeans.append(pairs)
-	dmeans.append(np.mean(distances))
-	imeans.append(np.mean(iscores, dtype=np.float32))
-	pmeans.append(np.mean(pscores, dtype=np.float32))
-
-	values = [np.mean(pairmeans), np.mean(imeans, dtype=np.float32), np.mean(pmeans, dtype=np.float32), np.mean(dmeans), pairmeans]
-
-	return values
+	fb = open(tmp_dir+'/'+output_name, 'a')
+	chrom = arguments[0]
+	start1 = str(int(arguments[1])+design_left+exclude_left)
+	start2 = str(int(arguments[1])+design_left)
+	start3 = str(int(arguments[1]))
+	end1 = str(int(arguments[2])-design_right-exclude_right)
+	end2 = str(int(arguments[2])-design_right)
+	end3 = str(int(arguments[2]))
+	ID = arguments[3]
+	tab = '\t'
+	fb.write(chrom+tab+start1+tab+end1+tab+ID+tab+'0	+	0	0	0,0,0'+'\n')
+	fb.write(chrom+tab+start2+tab+end2+tab+ID+tab+'0	+	0	0	180,180,130'+'\n')
+	fb.write(chrom+tab+start3+tab+end3+tab+ID+tab+'0	+	0	0	40,175,40'+'\n')
+	fb.close()
 
 
 def write_log_results(log, end_time, dt, pair_list, grna_list, outfile, n):
@@ -941,26 +859,65 @@ def write_log_results(log, end_time, dt, pair_list, grna_list, outfile, n):
 				'\t#mean of paired sgRNAs scores:\t\t\t\t'+str(means[2])+'\n\n\n'+
 
 				'CRISPETA execution time: {0}h{1}m{2}s\n'.format(hours,minutes,seconds)+
-				'CRISPETA finished on: '+end_time.strftime("%A, %d. %B %Y %I:%M%p"))
-	
-
-def memory_usage_resource():
-    
-    rusage_denom = 1024.
-    if sys.platform == 'darwin':
-        # ... it seems that in OSX the output is different units ...
-        rusage_denom = rusage_denom * rusage_denom
-    mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / rusage_denom
-    return mem
+				'CRISPETA finished on: '+end_time.strftime("%A, %d. %B %Y %I:%M%p"))	
 
 
-def drange(start, stop, step):
-	r = start    
-	result = []
-	while r < stop:
-		result.append(r)
-		r += step
-	return result
+def comput_means(outfile):
+
+	fi = open(outfile, 'r')
+	oldID = ''
+
+	pairs, pairmeans = 0, []
+	distances, dmeans = [], []
+	iscores, imeans = [], []
+	pscores, pmeans = [], []
+
+	for line in fi:
+		if line.startswith('Sequence_ID(#pair)'):
+			continue
+		arg  = line.strip().split('\t')
+		newID = arg[0].split('(')[0]
+
+		if  newID != oldID:
+			if oldID == '':
+				pairs += 1
+				distances.append(int(arg[13]))
+				iscores.append(float(arg[5]))
+				iscores.append(float(arg[10]))
+				pscores.append(float(arg[14]))
+				oldID = newID	
+				continue	
+
+			pairmeans.append(pairs)
+			dmeans.append(np.mean(distances))
+			imeans.append(np.mean(iscores, dtype=np.float32))
+			pmeans.append(np.mean(pscores, dtype=np.float32))	
+
+			distances, iscores, pscores, pairs = [], [], [], 0
+			pairs += 1
+			distances.append(int(arg[13]))
+			iscores.append(float(arg[5]))
+			iscores.append(float(arg[10]))
+			pscores.append(float(arg[14]))
+		
+		else:
+			pairs += 1
+			distances.append(int(arg[13]))
+			iscores.append(float(arg[5]))
+			iscores.append(float(arg[10]))
+			pscores.append(float(arg[14]))		
+
+		oldID = newID
+
+	pairmeans.append(pairs)
+	dmeans.append(np.mean(distances))
+	imeans.append(np.mean(iscores, dtype=np.float32))
+	pmeans.append(np.mean(pscores, dtype=np.float32))
+
+	values = [np.mean(pairmeans), np.mean(imeans, dtype=np.float32), np.mean(pmeans, dtype=np.float32), np.mean(dmeans), pairmeans]
+
+	return values
+
 
 def plots(file_name, results_regions):
 
@@ -1033,8 +990,10 @@ def plots(file_name, results_regions):
 		print "\n\tpdfkit module not installed. Install it to obtain pdf with graphics."
 	
 	if _pdfkit==1:
-		pdfkit.from_file(file_name+'_images.html',file_name+'images.pdf',options={'quiet':''})
-
+		try:
+			pdfkit.from_file(file_name+'_images.html',file_name+'images.pdf',options={'quiet':''})
+		except IOError:
+			pass
 
 def def_chartpie(values):
 
@@ -1077,34 +1036,45 @@ def def_layout(title, xname, yname, xfont='Courier New, monospace', yfont='Couri
 	return layout
 
 
-def get_conn(dictionary):
-	conn = _mysql.connect(**dictionary)													#connects to mysql
-	return conn
+matrix = [
+[0,0,0,0],
+[0.006447933,-0.005126545,0.01868168,-0.0263186],
+[-0.002556713,0.01784427,-0.001228439,-0.02082668],
+[0.02067124,0.001810971,0.009265117,-0.03726897],
+[-0.01541201,-0.006865736,0.02225981,-0.007179623],
+[0.006701975,-0.009327798,0.01266799,-0.01061834],
+[0.003990316,0.008476303,0.01163767,-0.03195586],
+[-0.005194459,-0.002546783,0.02465747,-0.02884586],
+[-0.02852648,0.009015268,0.03048746,-0.02578712],
+[-0.009598615,0.002571972,0.01891338,-0.02318647],
+[0.01047803,-0.009462136,0.03431422,-0.04550686],
+[0.02912254,-0.01410245,0.002359817,-0.01265939],
+[0.004315982,-0.006850088,0.02789401,-0.03952176],
+[0.01410663,-0.003234736,-0.01502249,0.01281278],
+[0.0376519,-0.003153252,-0.02123348,-0.00178908],
+[0.01593133,0.025584,-0.03391245,0.000224124],
+[0.02561585,-0.02293057,0.01418497,-0.01378385],
+[-0.01040574,0.005392964,0.009837631,-0.01119136],
+[0.04550361,-0.01997099,0.003354427,-0.0156738],
+[0.0248649,-0.04276305,0.03505556,-0.01229142]]
 
+def SeqToIndex(seq):
+	index = {'A':0, 'C':1, 'G':2, 'T':3}
+	seq_index = []
+	for nt in seq:
+		seq_index.append(index[nt])
+	return seq_index
 
-def create_database(conn, dbname):	
-	conn.query("CREATE DATABASE IF NOT EXISTS "+dbname)									#creates database
+def ComputeSeqScore(matrix, index):
 
+	score = 0
+	for i,j in enumerate(index):
+		score += matrix[i][j]
+	return score
 
-def create_table(conn,tablename,cnames):
+def han_score(sgRNA, matrix=matrix):
 
-	table = "CREATE TABLE IF NOT EXISTS "+tablename+" ("+\
-			cnames['col1']+" VARCHAR(20) NOT NULL,"+\
-			cnames['col2']+" INT NOT NULL,"+\
-			cnames['col3']+" INT NOT NULL,"+\
-			cnames['col4']+" INT NOT NULL,"+\
-			cnames['col5']+" INT NOT NULL,"+\
-			cnames['col6']+" INT NOT NULL,"\
-			"PRIMARY KEY (grna));"
-		
-	conn.query(table)
+	seq = SeqToIndex(sgRNA)
+	score = ComputeSeqScore(matrix, seq)
+	return score
 
-
-def insert_into_table(conn,infile,table):
-
-	query = "LOAD DATA LOCAL INFILE '"+infile+\
-			"' INTO TABLE "+table+\
-			" FIELDS TERMINATED BY ','"\
-			" LINES TERMINATED BY '\n'"
-
-	conn.query(query)
