@@ -577,9 +577,9 @@ def write_pairs(combined_method, up, down, pscore, arg, of, method, seq_id):
 
 	mscore = m_score(up[-1],down[-1])
 
-	if method == "DECKO":
-		if up[3][0]!='G' and down[3][0]!='G':
-			up[3] = "G"+up[3]
+	#if method == "DECKO":
+	#	if up[3][0]!='G' and down[3][0]!='G':
+	#		up[3] = "G"+up[3]
 
 	new_line = [seq_id]+up[:5]+down[:5]+[str(dist)]+[str(score)]+[str(mscore)]
 	for element in new_line:
@@ -655,7 +655,7 @@ def pairs_filter(arguments, input_file, output_file, number_results, variety, up
 	else:
 		fo = open(output_file, 'a')
 		tab="\t"
-		fo.write('Sequence_ID(#pair)'+tab+'chromosome'+tab+'start'+tab+'end'+tab+'sgRNA_1+PAM'+tab+'score_1'+tab+'chromosome'+tab+'start'+tab+'end'+tab+'sgRNA_2+PAM'+tab+'score_2'+tab+'distance_to_exclude_up_region'+tab+'distance_to_exclude_down_region'+tab+'distance_between_sgRNAs'+tab+'paired_score'+tab+'mask_score'+tab+'oligo\n')
+		fo.write('Sequence_ID(#pair)'+tab+'chromosome'+tab+'start'+tab+'end'+tab+'sgRNA1'+tab+'score_1'+tab+'chromosome'+tab+'start'+tab+'end'+tab+'sgRNA2'+tab+'score_2'+tab+'distance_to_exclude_up_region'+tab+'distance_to_exclude_down_region'+tab+'distance_between_sgRNAs'+tab+'paired_score'+tab+'mask_score'+tab+'Insert1\n')
 
 	fbpairs = open(tmp_dir+'/browser_pairs', 'a')
 
@@ -686,8 +686,11 @@ def pairs_filter(arguments, input_file, output_file, number_results, variety, up
 				if method == "DECKO":
 					if arg[3][0] == 'G':
 						oligo = gibson_5+arg[3][:-3]+constant_h1+arg[8][:-3]+gibson_3
-					else: 
+					elif arg[8][0] == 'G': 
 						oligo = gibson_5+arg[8][:-3]+constant_h1+arg[3][:-3]+gibson_3
+					else:
+						oligo = gibson_5+'G'+arg[3][:-3]+constant_h1+arg[8][:-3]+gibson_3
+						arg[3] = "(G)"+arg[3]
 				else:
 					oligo = '.'
 
@@ -701,10 +704,11 @@ def pairs_filter(arguments, input_file, output_file, number_results, variety, up
 				dist_up_TSS = min(int(arg[2]), int(arg[7])) - (int(arguments[1]) + up_range)
 				dist_down_TSS = max(int(arg[1]), int(arg[6])) - (int(arguments[2]) - down_range)  
 
-				result_lines.append(seq_id+'('+str(i)+')'+'\t'+arg[0]+'\t'+arg[1]+'\t'+arg[2]+'\t'+arg[3]+'\t'+arg[4]+'\t'
-								+arg[5]+'\t'+arg[6]+'\t'+arg[7]+'\t'+arg[8]+'\t'+arg[9]+'\t'
+
+				result_lines.append(seq_id+'('+str(i)+')'+'\t'+arg[0]+'\t'+arg[1]+'\t'+arg[2]+'\t'+arg[3][:-3].upper()+'\t'+arg[4]+'\t'
+								+arg[5]+'\t'+arg[6]+'\t'+arg[7]+'\t'+arg[8][:-3].upper()+'\t'+arg[9]+'\t'
 				 				+str(dist_up_TSS)+'\t'+str(dist_down_TSS)+'\t'
-				 				+arg[10]+'\t'+arg[11]+'\t'+arg[12]+'\t'+oligo+'\n')
+				 				+arg[10]+'\t'+arg[11]+'\t'+arg[12]+'\t'+oligo.upper()+'\n')
 
 				positions = [arg[1],arg[7]] if int(arg[1]) < int(arg[7]) else [arg[6],arg[2]]
 				start = str(positions[0])
