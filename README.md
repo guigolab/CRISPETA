@@ -1,6 +1,6 @@
-#**About CRISPETA**
+#**About CRISPETa**
 		                            
-CRISPETA is a really flexible tool to obtain CRISPR paired sgRNAs on desired regions of a genome. Using as input a BED format file CRISPETA is able to find, analyze, and score all posible sgRNAs. As a result the program returns:
+CRISPETa is a really flexible tool to obtain CRISPR paired sgRNAs on desired regions of a genome. Using as input a BED format file CRISPETa is able to find, analyze, and score all posible sgRNAs. As a result the program returns:
 
 1. A file with information of {n} paired sgRNAs per region: position in the genome, sequence of the sgRNA+PAM, individual and paired scores, distance between sgRNAs and oligo construction if DECKO method is selected
 2. A log file with summary of the execution. Contains statistics about the execution: number of analyzed regions, mean of sgRNA scores (individual and paired), sgRNAs filtered out for each of the filters, etc.
@@ -8,7 +8,7 @@ CRISPETA is a really flexible tool to obtain CRISPR paired sgRNAs on desired reg
 4. PDF with graphics based on summary numbers: histogram with pairs per target region, pie chart with distributions of regions with n=0,n=10 or 0<n<10 , etc.
 5. HTML with same graphics than the PDF above to open in browser and interact with them.
 
-The code for the tool can be found on github: https://github.com/guigolab/CRISPETA
+The code for the tool can be found on github: https://github.com/guigolab/CRISPETa
 Or on our web server: http://crispeta.crg.eu
 
 
@@ -26,9 +26,9 @@ Or on our web server: http://crispeta.crg.eu
 
 ##**Previous Steps**
 
-**WARNING: CRISPETA uses MySQL. Options to connect to MySQL database can be found in config.py file. Change parameters if necessary in order to connect to your MySQL season. If you change options names while creating the database remember to change this values on config.py file in order to allow CRISPETA.py to run without errors**
+**WARNING: CRISPETa uses MySQL. Options to connect to MySQL database can be found in config.py file. Change parameters if necessary in order to connect to your MySQL season. If you change options names while creating the database remember to change this values on config.py file in order to allow CRISPETa.py to run without errors**
 
-Before running CRISPETA the user must create a database in MySQL to store off-target information for sgRNAs in target genome (this step can take a while depending on the size of the database and computer resources. More than 1 hour for human off-targets). Files with precomputed off-target information for some organisms can be directly download from our web server (http://crispeta.crg.eu).
+Before running CRISPETa the user must create a database in MySQL to store off-target information for sgRNAs in target genome (this step can take a while depending on the size of the database and computer resources. More than 1 hour for human off-targets). Files with precomputed off-target information for some organisms can be directly download from our web server (http://crispeta.crg.eu).
 
 ####**Create database**
 
@@ -71,7 +71,7 @@ The comma separated file can be loaded directly to MySQL from the terminal using
 	mysql>	LOAD DATA LOCAL INFILE '<dir>/offtarget_analysis.txt' INTO TABLE  [genome_name]
 	-> FEILDS TERMINATED BY ',' LINES TERMINATED BY '\n';
 	
-##**CRISPETA**
+##**CRISPETa**
 **Running example**
 
 	$ python CRISPETa.py -i [file.bed] -g [genome.fasta] -o results.txt 
@@ -94,9 +94,9 @@ The comma separated file can be loaded directly to MySQL from the terminal using
 - **-mn dir:** Path to BED file with negative regions. sgRNAs overlapping negative regions will be disfavored when ranking result pairs
 - **-si float (default: 0.2):** Minimum individual sgRNA score allowed
 - **-sp float (default: 0.4):** Minimum sgRNA paired score allowed
-- **-sm string (default: Doench):** Score algorithm used for scoring protospacers
+- **-sm string (default: Doench):** Score algorithm used for scoring protospacers [Doench1, Doench2 or Han]
 - **-sc string (default: +):** Method applied to paired score: "+" (sum) or "x" (product) of individual sgRNA scores. Multiplication method will favor those sgRNA pairs where both sgRNAs have high scores e.g: sum 0.8+0.2=1, product 0.8*0.2=0.16.
-- **-c string (default: None):** Method applied when making sgRNA pairs: "None" or "DECKO". DECKO method will create pairs where at least one of the sgRNAs starts with G.
+- **-c string (default: None):** Method applied when making sgRNA pairs: "None" or "DECKO". DECKO method will create pairs where at least one of the sgRNAs starts with 'G'. If none an extra 'G' is appended to sgRNA upstream.
 - **-r string (default: score):** Key value for sorting results [score/dist]
 
 **Input** 
@@ -119,34 +119,33 @@ The fields in the file correspond to:
     
 **Outputs**
 
-1. Main output: Pairs found by CRISPETA for target regions in Input file
+1. Main output: Pairs found by CRISPETa for target regions in Input file
 
-		Sequence_ID(#pair)	chromosome	start	end	sgRNA_1+PAM	score_1	chromosome	start	end	sgRNA_2+PAM	score_2	distance_to_exclude_up_region	distance_to_exclude_down_region	distance_between_sgRNAs	paired_score	mask_score	oligo
-		region1(1)	chr1	29557261	29557284	GCTTGTCTATGGGCACCACGGGG	0.944	chr1	29557844	29557867	CGTGTACTCTCCTCAGTGTAGGG	0.572	-69	290	560	1.516	2	.
-		region1(2)	chr1	29557261	29557284	GCTTGTCTATGGGCACCACGGGG	0.944	chr1	29557805	29557828	CCTATGCCGTTACATGGTAGTGG	0.542	-69	251	521	1.486	2	.
-		region1(3)	chr1	29557261	29557284	GCTTGTCTATGGGCACCACGGGG	0.944	chr1	29557576	29557599	GACTGCGTGTGGGCCCCGGAGGG	0.501	-69	22	292	1.445	2	.
+		Sequence_ID(#pair)	chromosome	start	end	sgRNA1	score_1	chromosome	start	end	sgRNA2	score_2	distance_to_exclude_up_region	distance_to_exclude_down_region	distance_between_sgRNAs	paired_score	mask_score	Insert1
+		region1(1)	chr6	151560756	151560779	(G)TGTCATGTGTCGGCATCGCG	0.863	chr6	151562154	151562177	TTTCTGCGCACTCTTCCGGT	0.722	-154	421	1375	1.585	8	ATCTTGTGGAAAGGACGAAACACCGGTGTCATGTGTCGGCATCGCGGTTTTAGAGCTAGAAGAGACGGAATTCCTAGGATCCCGTCTCTCTGTATGAGACCACTCTTTCCCTTTCTGCGCACTCTTCCGGTGTTTTAGAGCTAGAAATAGCAAGTTAAAATAAGGC
+		region1(2)	chr6	151560756	151560779	(G)TGTCATGTGTCGGCATCGCG	0.863	chr6	151562012	151562035	TTTCAGGGTCTTTCGCGCCG	0.688	-154	279	1233	1.551	8	ATCTTGTGGAAAGGACGAAACACCGGTGTCATGTGTCGGCATCGCGGTTTTAGAGCTAGAAGAGACGGAATTCCTAGGATCCCGTCTCTCTGTATGAGACCACTCTTTCCCTTTCAGGGTCTTTCGCGCCGGTTTTAGAGCTAGAAATAGCAAGTTAAAATAAGGC
+		region1(3)	chr6	151560853	151560876	(G)TCATTTCCCCCCGTTCCCCG	0.784	chr6	151562154	151562177	TTTCTGCGCACTCTTCCGGT	0.722	-57	421	1278	1.506	8	ATCTTGTGGAAAGGACGAAACACCGGTCATTTCCCCCCGTTCCCCGGTTTTAGAGCTAGAAGAGACGGAATTCCTAGGATCCCGTCTCTCTGTATGAGACCACTCTTTCCCTTTCTGCGCACTCTTCCGGTGTTTTAGAGCTAGAAATAGCAAGTTAAAATAAGGC
 
 2. GenomeBrowser file: Pairs and target regions in BED format ready to upload in GenomeBrowser as a custom traks
 
-		track name="Target_Regions" description="Regions_for_sgRNA_searching" visibility=1 itemRgb="On"
-		chr1	29557453	29557454	region1	0	+	0	0	0,0,0
-		chr1	29557353	29557554	region1	0	+	0	0	180,180,130
-		chr1	29556853	29558054	region1	0	+	0	0	40,175,40
-		...
-		track name="sgRNA_pairs" description="sgRNA_pairs" visibility=3 itemRgb="On"
-		chr1	29557261	29557867	region1(1)	1.516	.	29557261	29557867	193.0,0,0	2	23,23	0,583
-		chr1	29557261	29557828	region1(2)	1.486	.	29557261	29557828	189.0,0,0	2	23,23	0,544
-		chr1	29557261	29557599	region1(3)	1.445	.	29557261	29557599	184.0,0,0	2	23,23	0,315
+		track name="/test_Target_Regions" description=" " visibility=1 itemRgb="On"
+		chr6	151561033	151561633	region1	0	+	0	0	0,0,0
+		chr6	151560933	151561733	region1	0	+	0	0	180,180,130
+		chr6	151560433	151562233	region1	0	+	0	0	40,175,40
+		...		
+		track name="/test_sgRNA_pairs" description=" " visibility=3 itemRgb="On"
+		chr6	151560756	151562177	region1(1)	1.585	.	151560756	151562177	202.0,0,0	2	23,23	0,1398
+		chr6	151560756	151562035	region1(2)	1.551	.	151560756	151562035	198.0,0,0	2	23,23	0,1256
+		chr6	151560853	151562177	region1(3)	1.506	.	151560853	151562177	192.0,0,0	2	23,23	0,1301
 		...
 
 3. Execution summary: A brief explanation of execution is returned in txt format. Also some graphics are plotted in html and pdf format using summary results.
 
 
-##CRISPETA Data
+##CRISPETa Data
 
-    CRISPETA.py -> Main script with pipeline of crispeta.
+    CRISPETa.py -> Main script with pipeline of crispeta.
     crispeta_mysql.py -> module to load off-target information to MySQL in a easy way.
     config.py -> Options and values for MySQL configuration.
-    func.py -> necessary functions for CRISPETA.py and crispeta_mysql.py to work.
-    README.md -> Markdown file with information about CRISPETA.
-
+    func.py -> necessary functions for CRISPETa.py and crispeta_mysql.py to work.
+    README.md -> Markdown file with information about CRISPETa.
