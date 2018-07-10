@@ -71,7 +71,7 @@ The comma separated file can be loaded directly to MySQL from the terminal using
 	->	off4 INT NOT NULL,
 	->	PRIMARY KEY (grna));
 	mysql>	LOAD DATA LOCAL INFILE '[coma_separated_file.txt]' INTO TABLE  [genome_name]
-	-> FEILDS TERMINATED BY ',' LINES TERMINATED BY '\n';
+	-> FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
 	
 ##**CRISPETA **
 **Example**
