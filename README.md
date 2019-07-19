@@ -73,8 +73,10 @@ The comma separated file can be loaded directly to MySQL from the terminal using
 	mysql>	LOAD DATA LOCAL INFILE '[coma_separated_file.txt]' INTO TABLE  [genome_name]
 	-> FIELDS TERMINATED BY ',' LINES TERMINATED BY '\n';
 	
-##**CRISPETA **
-**Example**
+
+##**CRISPETA**
+**Running example**
+
 
 	$ python CRISPETA.py -i [file.bed] -g [genome.fasta] -o results.txt 
 
@@ -152,5 +154,6 @@ The fields in the file correspond to:
     CRISPETA.py -> Main script.
     crispeta_mysql.py -> Module to load off-target information to MySQL database.
     config.py -> Options and values for MySQL configuration.
-    func.py -> Required functions for CRISPETA.py and crispeta_mysql.py.
-    README.md -> Marckdown file with information about CRISPETA.
+    func.py -> necessary functions for CRISPETA.py and crispeta_mysql.py to work.
+    README.md -> Markdown file with information about CRISPETA.
+
