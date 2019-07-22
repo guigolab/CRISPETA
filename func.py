@@ -12,12 +12,13 @@ from operator import itemgetter
 #graphics
 import numpy as np
 try:
+	import chart_studio
 	import plotly
 	_plotly=1
 except ImportError:
 	_plotly=0
 if _plotly==1:
-	import plotly.plotly as py
+	import chart_studio.plotly as py
 	import plotly.graph_objs as go
 	from plotly.graph_objs import Scatter, Layout
 
